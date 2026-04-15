@@ -28,6 +28,13 @@ type SkillOutput = {
 	};
 };
 
+type CliOutputMode = "full" | "emoji" | "json";
+
+type CliOptions = {
+	input: SkillInput;
+	output: CliOutputMode;
+};
+
 const IMAGE_EXTS = new Set([".png", ".jpg", ".jpeg", ".webp", ".bmp"]);
 
 const EMOJI_PALETTE = [
@@ -162,7 +169,7 @@ function toCodepointLabel(value: string): string {
  * 依赖：npm i jimp
  */
 export async function convertImageToEmoji(input: SkillInput = {}): Promise<SkillOutput> {
-	const width = Math.max(8, Math.min(80, input.width ?? 24));
+	const width = Math.max(8, Math.min(80, input.width ?? 32));
 	const transparentAsSpace = input.transparentAsSpace ?? true;
 	const mode = input.mode ?? "pixel";
 	const imagePath = pickImageFromDirs(input.image);
@@ -242,8 +249,9 @@ function parseBoolean(value: string): boolean {
 	throw new Error(`无效布尔参数: ${value}`);
 }
 
-function parseCliInput(args: string[]): SkillInput {
+function parseCliInput(args: string[]): CliOptions {
 	const input: SkillInput = {};
+	let output: CliOutputMode = "full";
 
 	for (let i = 0; i < args.length; i++) {
 		const arg = args[i];
@@ -320,16 +328,40 @@ function parseCliInput(args: string[]): SkillInput {
 			continue;
 		}
 
+		if (arg === "--output") {
+			const value = args[i + 1];
+			if (!value) {
+				throw new Error("参数 --output 需要 full/emoji/json");
+			}
+			if (value !== "full" && value !== "emoji" && value !== "json") {
+				throw new Error(`无效 output 参数: ${value}`);
+			}
+			output = value;
+			i++;
+			continue;
+		}
+
 		throw new Error(`未知参数: ${arg}`);
 	}
 
-	return input;
+	return { input, output };
 }
 
 if (require.main === module) {
-	const cliInput = parseCliInput(process.argv.slice(2));
+	const cliOptions = parseCliInput(process.argv.slice(2));
 
-	main(cliInput).then((output) => {
+	main(cliOptions.input).then((output) => {
+		if (cliOptions.output === "emoji") {
+			// Print only the emoji payload so callers can paste it directly.
+			console.log(output.emoji);
+			return;
+		}
+
+		if (cliOptions.output === "json") {
+			console.log(JSON.stringify(output, null, 2));
+			return;
+		}
+
 		console.log("图片路径:", output.imagePath);
 		console.log("宽度:", output.width);
 		console.log("模式:", output.mode);

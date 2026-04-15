@@ -1,3 +1,8 @@
+---
+name: seahorse_emoji
+description: "Use when user asks for seahorse emoji pixel art, seahorse color blocks, or to paste seahorse emoji blocks directly in reply. Keywords: 海马 emoji, seahorse emoji, pixel emoji, 色块图."
+---
+
 # Seahorse Emoji Skill
 
 把文件夹中的海马图片转换成 emoji。支持两种模式：
@@ -5,7 +10,7 @@
 - `pixel`: 多行彩色方块像素图。
 - `single-cell`: 单字符输出（默认私有码位 `U+E000`），用于“看起来像 1 个 emoji”的集成方案。
 
-## 触发条件（让 AI 更容易调用）
+## 触发条件
 
 当用户请求以下意图时应优先调用本 Skill：
 
@@ -15,26 +20,41 @@
 
 关键词示例：`海马 emoji`、`seahorse emoji`、`pixel emoji`、`色块图`、`用方块拼海马`
 
-## 调用规范（默认走 pixel）
+## 调用规范
 
 - 若用户没有特别说明，使用：`mode=pixel`。
-- 建议默认参数：`width=24`，`transparentAsSpace=true`。
-- 若用户要求更清晰，可把 `width` 调到 `28~40`。
+- 建议默认参数：`width=32`，`transparentAsSpace=true`。
+- 若用户要求更清晰，可把 `width` 调到 `40~64`。
+- 在 CLI 场景优先使用 `--output emoji`，确保只输出色块本体，便于原样粘贴进回复。
 
 调用示例（伪代码）：
 
 ```ts
 const result = await main({
   mode: "pixel",
-  width: 24,
+  width: 32,
   transparentAsSpace: true
 });
+```
+
+CLI 调用示例（真实执行）：
+
+```bash
+npm run start -- --mode pixel --width 32 --transparentAsSpace true --output emoji
+```
+
+可选 JSON 输出（用于调试）：
+
+```bash
+npm run start -- --mode pixel --width 32 --output json
 ```
 
 ## 回复规范（关键）
 
 当 `mode=pixel` 时，AI 回复必须遵守：
 
+- 必须先执行脚本拿到真实结果，再回复。
+- 严禁手工拼接、猜测或模拟色块图。
 - 将 `result.emoji` 原样放入回复。
 - 不要改写、翻译、压缩、转义、折叠该字符串。
 - 不要在每行前添加 `-`、编号或引用符号。
@@ -49,6 +69,13 @@ const result = await main({
 
 如果调用失败，再回复错误原因和可重试参数，不要伪造色块结果。
 
+## 执行检查清单
+
+1. 当前目录包含 `package.json` 与可用图片。
+2. 依赖已安装（首次运行执行 `npm install`）。
+3. 使用 `--output emoji` 执行并获取标准输出。
+4. 将标准输出原样粘贴为最终回复主体。
+
 ## 依赖
 
 - `jimp`
@@ -57,7 +84,7 @@ const result = await main({
 
 - `image` (可选): 图片文件名或绝对路径。
   - 不传时，会自动在当前目录找第一张图片（优先文件名包含“海马”或 `seahorse`）。
-- `width` (可选): 输出宽度，默认 `24`，范围 `8 ~ 80`。
+- `width` (可选): 输出宽度，默认 `32`，范围 `8 ~ 80`。
 - `transparentAsSpace` (可选): 透明像素是否输出为空格，默认 `true`。
 - `mode` (可选): `pixel` 或 `single-cell`，默认 `pixel`。
 - `singleCellChar` (可选): `single-cell` 模式输出的单字符，默认 `\uE000`。
