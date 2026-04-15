@@ -350,6 +350,7 @@ Set-Location "~\project\.github\skills\seahorse_emoji"; npm run start -- --mode 
 
 ## TODO
 
+- [ ] 联网获取 `seahorse`
 - [x] 将 `pixel` 模式生成的 `emoji` 转为 `svg` 并生成对应的 `tff` / `woff2`字体
 - [ ] 自动应用字体
 - [ ] 将字体应用到编辑器聊天面板
