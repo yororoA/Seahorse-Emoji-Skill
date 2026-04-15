@@ -1,0 +1,24 @@
+{
+  "name": "seahorse_emoji",
+  "version": "1.0.0",
+  "description": "Convert seahorse images to emoji pixel art",
+  "main": "script.js",
+  "scripts": {
+    "start": "ts-node script.ts",
+    "demo": "ts-node script.ts --width 32",
+    "build": "tsc script.ts --module commonjs --target es2020 --outDir dist",
+    "test": "echo \"No tests yet\""
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "jimp": "^0.22.12"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.3",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.3"
+  }
+}
