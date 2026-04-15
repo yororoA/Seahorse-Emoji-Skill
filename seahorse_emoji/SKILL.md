@@ -56,15 +56,17 @@ npm run start -- --mode pixel --width 32 --output json
 
 - 必须先执行脚本拿到真实结果，再回复。
 - 严禁手工拼接、猜测或模拟色块图。
-- 将 `result.emoji` 原样放入回复。
+- 必须将 `result.emoji` 放在一个独立 fenced code block 中输出。
+- 该 code block 内只能包含 `result.emoji` 本体，不允许额外文字、前缀、后缀。
 - 不要改写、翻译、压缩、转义、折叠该字符串。
 - 不要在每行前添加 `-`、编号或引用符号。
-- 可在色块前后加一行简短说明，但色块本体必须完整保留。
+- 说明文字（如果需要）必须放在 code block 外部。
 
 推荐回复模板：
 
-```text
 这是海马像素 emoji：
+
+```text
 {result.emoji}
 ```
 
