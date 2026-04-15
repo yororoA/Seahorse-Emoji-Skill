@@ -9,6 +9,7 @@ description: "Use when user asks for seahorse emoji pixel art, seahorse color bl
 
 - `pixel`: 多行彩色方块像素图。
 - `single-cell`: 单字符输出（默认私有码位 `U+E000`），用于“看起来像 1 个 emoji”的集成方案。
+  - 在该模式下会自动：先像素化图片，再导出 SVG，并生成绑定私有码位的字体文件（TTF + WOFF2）。
 
 ## 触发条件
 
@@ -89,6 +90,8 @@ npm run start -- --mode pixel --width 32 --output json
 - `mode` (可选): `pixel` 或 `single-cell`，默认 `pixel`。
 - `singleCellChar` (可选): `single-cell` 模式输出的单字符，默认 `\uE000`。
 - `shortcode` (可选): `single-cell` 模式下的回退短代码，默认 `:seahorse:`。
+- `singleCellAssetsDir` (可选): `single-cell` 资源导出目录，默认 `./generated`。
+- `fontFamily` (可选): 导出字体的 family 名称，默认 `SeahorseEmoji`。
 
 ## 输出
 
@@ -97,12 +100,13 @@ npm run start -- --mode pixel --width 32 --output json
 - `emoji`: 转换后的 emoji 多行字符串。
 - `mode`: 实际输出模式。
 - `renderHints` (仅 `single-cell`): 渲染提示（是否需要自定义渲染、码位、短代码、回退说明）。
+  - 包含 `assets.svgPath`、`assets.fontPath`(TTF)、`assets.woff2Path`，用于接入前端/客户端字体渲染。
 
 ## 行为说明
 
 1. 自动读取海马图片。
 2. 当 `mode=pixel` 时：按比例缩放并映射为彩色方块 emoji（`⬛🟫🟧🟨🟩🟦🟪⬜`）。
-3. 当 `mode=single-cell` 时：返回 1 个字符（默认 `U+E000`）并附带渲染提示。
+3. 当 `mode=single-cell` 时：先生成像素栅格，再导出 SVG 与 TTF/WOFF2（绑定 `U+E000` 等私有码位），最后返回单字符与渲染提示。
 
 ## 关键限制
 
@@ -111,6 +115,8 @@ npm run start -- --mode pixel --width 32 --output json
   - 方案 A：加载包含 `U+E000` 海马字形的自定义字体。
   - 方案 B：把 `:seahorse:` 这类短代码替换成平台自定义 emoji（类似社交软件做法）。
 - 在不支持自定义字体/短代码替换的终端中，会显示为普通字符或方框。
+
+  > 重要：Skill 可以自动输出 Unicode（如 `\uE000`）和字体资源路径，但“映射成 emoji 外观”必须由客户端应用字体或短代码替换逻辑来完成。
 
 ## 使用建议
 

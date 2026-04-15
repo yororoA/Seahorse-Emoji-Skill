@@ -2,6 +2,7 @@ declare const require: any;
 declare const __dirname: string;
 declare const module: any;
 declare const process: any;
+declare const Buffer: any;
 
 const fs = require("fs");
 const path = require("path");
@@ -13,6 +14,8 @@ type SkillInput = {
 	mode?: "pixel" | "single-cell";
 	singleCellChar?: string;
 	shortcode?: string;
+	singleCellAssetsDir?: string;
+	fontFamily?: string;
 };
 
 type SkillOutput = {
@@ -25,6 +28,12 @@ type SkillOutput = {
 		codepoint: string;
 		shortcode: string;
 		fallbackText: string;
+		assets?: {
+			svgPath: string;
+			fontPath: string;
+				woff2Path: string;
+			fontFamily: string;
+		};
 	};
 };
 
@@ -47,6 +56,19 @@ const EMOJI_PALETTE = [
 	{ emoji: "🟪", rgb: [171, 71, 188] as const },
 	{ emoji: "⬜", rgb: [240, 240, 240] as const }
 ];
+
+type RasterCell = {
+	r: number;
+	g: number;
+	b: number;
+	a: number;
+};
+
+type RasterGrid = {
+	width: number;
+	height: number;
+	cells: RasterCell[];
+};
 
 function colorDistance(r: number, g: number, b: number, c: readonly [number, number, number]): number {
 	const dr = r - c[0];
@@ -164,6 +186,221 @@ function toCodepointLabel(value: string): string {
 	return `U+${cp.toString(16).toUpperCase().padStart(4, "0")}`;
 }
 
+async function loadRasterGrid(imagePath: string, width: number): Promise<RasterGrid> {
+	const jimpModule = require("jimp");
+	const Jimp = (jimpModule as any).default ?? jimpModule;
+	const image = await Jimp.read(imagePath);
+
+	if (!image.bitmap.width || !image.bitmap.height) {
+		throw new Error("图片尺寸无效，无法转换。请更换一张正常图片。");
+	}
+
+	const targetHeight = Math.max(8, Math.round((image.bitmap.height / image.bitmap.width) * width * 0.55));
+	image.resize(width, targetHeight);
+
+	const cells: RasterCell[] = [];
+	for (let y = 0; y < image.bitmap.height; y++) {
+		for (let x = 0; x < image.bitmap.width; x++) {
+			const idx = (image.bitmap.width * y + x) * 4;
+			const data = image.bitmap.data;
+			cells.push({
+				r: data[idx],
+				g: data[idx + 1],
+				b: data[idx + 2],
+				a: data[idx + 3]
+			});
+		}
+	}
+
+	return {
+		width: image.bitmap.width,
+		height: image.bitmap.height,
+		cells
+	};
+}
+
+function rasterToEmojiLines(raster: RasterGrid, transparentAsSpace: boolean): string[] {
+	const lines: string[] = [];
+	for (let y = 0; y < raster.height; y++) {
+		let row = "";
+		for (let x = 0; x < raster.width; x++) {
+			const cell = raster.cells[y * raster.width + x];
+			if (transparentAsSpace && cell.a < 80) {
+				row += "  ";
+			} else {
+				row += nearestEmoji(cell.r, cell.g, cell.b);
+			}
+		}
+		lines.push(row);
+	}
+	return lines;
+}
+
+function ensureDir(dirPath: string): string {
+	if (!fs.existsSync(dirPath)) {
+		fs.mkdirSync(dirPath, { recursive: true });
+	}
+	return dirPath;
+}
+
+function makeSafeCodepointSuffix(singleCellChar: string): string {
+	const cp = singleCellChar.codePointAt(0);
+	if (!cp) {
+		return "UNKNOWN";
+	}
+	return cp.toString(16).toUpperCase().padStart(4, "0");
+}
+
+function rasterToSvg(raster: RasterGrid, outputPath: string): string {
+	const pixelSize = 16;
+	const viewWidth = raster.width * pixelSize;
+	const viewHeight = raster.height * pixelSize;
+	const rects: string[] = [];
+
+	for (let y = 0; y < raster.height; y++) {
+		for (let x = 0; x < raster.width; x++) {
+			const cell = raster.cells[y * raster.width + x];
+			if (cell.a < 16) {
+				continue;
+			}
+
+			const opacity = Number((cell.a / 255).toFixed(4));
+			const base = `<rect x="${x * pixelSize}" y="${y * pixelSize}" width="${pixelSize}" height="${pixelSize}" fill="rgb(${cell.r},${cell.g},${cell.b})"`;
+			if (opacity >= 1) {
+				rects.push(`${base} />`);
+			} else {
+				rects.push(`${base} fill-opacity="${opacity}" />`);
+			}
+		}
+	}
+
+	const svg = [
+		`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${viewWidth} ${viewHeight}" shape-rendering="crispEdges">`,
+		...rects,
+		"</svg>"
+	].join("\n");
+
+	fs.writeFileSync(outputPath, svg, "utf8");
+	return outputPath;
+}
+
+function buildGlyphPathFromRaster(raster: RasterGrid): any {
+	const opentype = require("opentype.js");
+	const glyphPath = new opentype.Path();
+
+	const em = 1024;
+	const cellSize = Math.max(1, Math.floor(em / Math.max(raster.width, raster.height)));
+	const drawWidth = raster.width * cellSize;
+	const drawHeight = raster.height * cellSize;
+	const offsetX = Math.floor((em - drawWidth) / 2);
+	const offsetY = Math.floor((em - drawHeight) / 2);
+
+	for (let y = 0; y < raster.height; y++) {
+		for (let x = 0; x < raster.width; x++) {
+			const cell = raster.cells[y * raster.width + x];
+			if (cell.a < 100) {
+				continue;
+			}
+
+			const brightness = (cell.r + cell.g + cell.b) / 3;
+			if (brightness > 246) {
+				continue;
+			}
+
+			const x0 = offsetX + x * cellSize;
+			const y0 = offsetY + (raster.height - y - 1) * cellSize;
+			const x1 = x0 + cellSize;
+			const y1 = y0 + cellSize;
+
+			glyphPath.moveTo(x0, y0);
+			glyphPath.lineTo(x1, y0);
+			glyphPath.lineTo(x1, y1);
+			glyphPath.lineTo(x0, y1);
+			glyphPath.close();
+		}
+	}
+
+	return glyphPath;
+}
+
+function rasterToFont(
+	raster: RasterGrid,
+	singleCellChar: string,
+	fontPath: string,
+	fontFamily: string
+): string {
+	const opentype = require("opentype.js");
+	const codePoint = singleCellChar.codePointAt(0);
+	if (!codePoint) {
+		throw new Error("singleCellChar 码位无效，无法生成字体。");
+	}
+
+	const notdef = new opentype.Glyph({
+		name: ".notdef",
+		unicode: 0,
+		advanceWidth: 1024,
+		path: new opentype.Path()
+	});
+
+	const glyph = new opentype.Glyph({
+		name: "seahorse",
+		unicode: codePoint,
+		advanceWidth: 1024,
+		path: buildGlyphPathFromRaster(raster)
+	});
+
+	const font = new opentype.Font({
+		familyName: fontFamily,
+		styleName: "Regular",
+		unitsPerEm: 1024,
+		ascender: 1024,
+		descender: 0,
+		glyphs: [notdef, glyph]
+	});
+
+	const buffer = Buffer.from(font.toArrayBuffer());
+	fs.writeFileSync(fontPath, buffer);
+	return fontPath;
+}
+
+function convertTtfToWoff2(ttfPath: string, woff2Path: string): string {
+	const ttf2woff2Module = require("ttf2woff2");
+	const ttf2woff2 = (ttf2woff2Module as any).default ?? ttf2woff2Module;
+	const ttfBuffer = fs.readFileSync(ttfPath);
+	const woff2Buffer = Buffer.from(ttf2woff2(ttfBuffer));
+	fs.writeFileSync(woff2Path, woff2Buffer);
+	return woff2Path;
+}
+
+function generateSingleCellAssets(
+	raster: RasterGrid,
+	singleCellChar: string,
+	assetsDir?: string,
+	fontFamily?: string
+): { svgPath: string; fontPath: string; woff2Path: string; fontFamily: string } {
+	const resolvedAssetsDir = ensureDir(
+		assetsDir
+			? (path.isAbsolute(assetsDir) ? assetsDir : path.join(process.cwd(), assetsDir))
+			: path.join(process.cwd(), "generated")
+	);
+	const suffix = makeSafeCodepointSuffix(singleCellChar);
+	const resolvedFontFamily = fontFamily?.trim() || "SeahorseEmoji";
+	const svgPath = path.join(resolvedAssetsDir, `seahorse-${suffix}.svg`);
+	const fontPath = path.join(resolvedAssetsDir, `${resolvedFontFamily}-${suffix}.ttf`);
+	const woff2Path = path.join(resolvedAssetsDir, `${resolvedFontFamily}-${suffix}.woff2`);
+
+	rasterToSvg(raster, svgPath);
+	rasterToFont(raster, singleCellChar, fontPath, resolvedFontFamily);
+	convertTtfToWoff2(fontPath, woff2Path);
+
+	return {
+		svgPath,
+		fontPath,
+		woff2Path,
+		fontFamily: resolvedFontFamily
+	};
+}
+
 /**
  * 将图片转换为 emoji 像素画
  * 依赖：npm i jimp
@@ -174,9 +411,11 @@ export async function convertImageToEmoji(input: SkillInput = {}): Promise<Skill
 	const mode = input.mode ?? "pixel";
 	const imagePath = pickImageFromDirs(input.image);
 	const shortcode = input.shortcode ?? ":seahorse:";
+	const raster = await loadRasterGrid(imagePath, width);
 
 	if (mode === "single-cell") {
 		const singleCellChar = normalizeSingleCellChar(input.singleCellChar);
+		const assets = generateSingleCellAssets(raster, singleCellChar, input.singleCellAssetsDir, input.fontFamily);
 		return {
 			imagePath,
 			width,
@@ -186,42 +425,13 @@ export async function convertImageToEmoji(input: SkillInput = {}): Promise<Skill
 				requiresCustomRendering: true,
 				codepoint: toCodepointLabel(singleCellChar),
 				shortcode,
-				fallbackText: "若客户端不支持私有码位字体，请回退到 :seahorse: 或多行像素图。"
+				fallbackText: "若客户端不支持私有码位字体，请回退到 :seahorse: 或多行像素图。",
+				assets
 			}
 		};
 	}
 
-	const jimpModule = require("jimp");
-	const Jimp = (jimpModule as any).default ?? jimpModule;
-	const image = await Jimp.read(imagePath);
-	if (!image.bitmap.width || !image.bitmap.height) {
-		throw new Error("图片尺寸无效，无法转换。请更换一张正常图片。");
-	}
-
-	// 终端字符纵向更“高”，这里做一次纵横比修正
-	const targetHeight = Math.max(8, Math.round((image.bitmap.height / image.bitmap.width) * width * 0.55));
-
-	image.resize(width, targetHeight);
-
-	const lines: string[] = [];
-	for (let y = 0; y < image.bitmap.height; y++) {
-		let row = "";
-		for (let x = 0; x < image.bitmap.width; x++) {
-			const idx = (image.bitmap.width * y + x) * 4;
-			const data = image.bitmap.data;
-			const r = data[idx];
-			const g = data[idx + 1];
-			const b = data[idx + 2];
-			const a = data[idx + 3];
-
-			if (transparentAsSpace && a < 80) {
-				row += "  ";
-			} else {
-				row += nearestEmoji(r, g, b);
-			}
-		}
-		lines.push(row);
-	}
+	const lines = rasterToEmojiLines(raster, transparentAsSpace);
 
 	return {
 		imagePath,
@@ -328,6 +538,26 @@ function parseCliInput(args: string[]): CliOptions {
 			continue;
 		}
 
+		if (arg === "--singleCellAssetsDir") {
+			const value = args[i + 1];
+			if (!value) {
+				throw new Error("参数 --singleCellAssetsDir 需要提供目录");
+			}
+			input.singleCellAssetsDir = value;
+			i++;
+			continue;
+		}
+
+		if (arg === "--fontFamily") {
+			const value = args[i + 1];
+			if (!value) {
+				throw new Error("参数 --fontFamily 需要提供字体族名称");
+			}
+			input.fontFamily = value;
+			i++;
+			continue;
+		}
+
 		if (arg === "--output") {
 			const value = args[i + 1];
 			if (!value) {
@@ -373,6 +603,12 @@ if (require.main === module) {
 			console.log(`- codepoint: ${output.renderHints.codepoint}`);
 			console.log(`- shortcode: ${output.renderHints.shortcode}`);
 			console.log(`- 说明: ${output.renderHints.fallbackText}`);
+			if (output.renderHints.assets) {
+				console.log(`- svg: ${output.renderHints.assets.svgPath}`);
+				console.log(`- font(ttf): ${output.renderHints.assets.fontPath}`);
+				console.log(`- font(woff2): ${output.renderHints.assets.woff2Path}`);
+				console.log(`- fontFamily: ${output.renderHints.assets.fontFamily}`);
+			}
 		}
 	}).catch((err) => {
 		console.error("发生错误:", err.message);

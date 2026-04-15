@@ -3,6 +3,7 @@
 Goal: make seahorse look like one emoji cell in CLI/editor/API outputs.
 
 Core idea:
+
 - Output one marker character (default `U+E000`, Private Use Area).
 - Client side maps that codepoint to a custom glyph (font or shortcode renderer).
 - Fallback to `:seahorse:` or pixel-art when glyph mapping is unavailable.
@@ -25,6 +26,7 @@ Return both the marker and fallback metadata.
 ```
 
 Rules:
+
 - `emoji` is always one grapheme.
 - Keep `shortcode` stable (`:seahorse:`) for cross-platform fallback.
 
@@ -33,14 +35,23 @@ Rules:
 You need one custom font containing glyph `U+E000`.
 
 Steps:
+
 1. Prepare a monochrome or color seahorse vector (`seahorse.svg`).
 2. Open IcoMoon (or FontForge).
 3. Import SVG, assign codepoint `E000`.
-4. Export font files:
-   - Web: `SeahorseEmoji.woff2`
-   - Desktop/terminal: `SeahorseEmoji.ttf`
+4. Export font files.
+
+- Web: `SeahorseEmoji.woff2`
+- Desktop/terminal: `SeahorseEmoji.ttf`
+
+With current script, `single-cell` mode can auto-generate:
+
+- `generated/seahorse-E000.svg`
+- `generated/SeahorseEmoji-E000.ttf`
+- `generated/SeahorseEmoji-E000.woff2`
 
 Notes:
+
 - PUA codepoints (`E000`-`F8FF`) are not standard Unicode emoji.
 - If another font also uses `U+E000`, keep your custom font first in font-family.
 
@@ -84,11 +95,17 @@ Install `SeahorseEmoji.ttf` in OS first, then set VS Code font fallback.
 
 If chat panel is rendered by a fixed UI font, you may only see fallback text there.
 
+Important:
+
+- Skill can output marker Unicode (e.g. `\uE000`) automatically.
+- But glyph mapping is a rendering concern. You still need client-side font loading or shortcode replacement.
+
 ## 5. CLI / Terminal Display
 
 Terminal support differs by renderer.
 
 Minimum path on Windows Terminal:
+
 1. Install `SeahorseEmoji.ttf` in Windows.
 2. Set profile `font.face` to include your font first.
 3. Print marker `\uE000`.
@@ -101,12 +118,14 @@ Write-Output "\uE000"
 ```
 
 If terminal does not honor fallback fonts, use fallback strategy:
+
 - show `:seahorse:`
 - or call your existing `pixel` mode.
 
 ## 6. Runtime Fallback Strategy (important)
 
 Recommended priority:
+
 1. Try single-cell marker (`U+E000`).
 2. If glyph missing (tofu box / unknown char), render `:seahorse:`.
 3. If rich output allowed, render pixel-art block emoji.
