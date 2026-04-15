@@ -45,6 +45,7 @@ type CliOptions = {
 };
 
 const IMAGE_EXTS = new Set([".png", ".jpg", ".jpeg", ".webp", ".bmp"]);
+const IMAGE_DIR_NAME = "img";
 
 const EMOJI_PALETTE = [
 	{ emoji: "⬛", rgb: [20, 20, 20] as const },
@@ -96,29 +97,38 @@ function nearestEmoji(r: number, g: number, b: number): string {
 	return bestEmoji;
 }
 
+function pickRandomItem<T>(items: T[]): T {
+	const index = Math.floor(Math.random() * items.length);
+	return items[index];
+}
+
 function pickImageFile(baseDir: string, preferred?: string): string {
+	const imageDir = path.join(baseDir, IMAGE_DIR_NAME);
+
 	if (preferred) {
-		const p = path.isAbsolute(preferred) ? preferred : path.join(baseDir, preferred);
-		if (!fs.existsSync(p)) {
-			throw new Error(`指定图片不存在: ${p}`);
+		const directCandidate = path.isAbsolute(preferred) ? preferred : path.join(baseDir, preferred);
+		const imageDirCandidate = path.isAbsolute(preferred) ? preferred : path.join(imageDir, preferred);
+		if (fs.existsSync(directCandidate)) {
+			return directCandidate;
 		}
-		return p;
+		if (fs.existsSync(imageDirCandidate)) {
+			return imageDirCandidate;
+		}
+		throw new Error(`指定图片不存在: ${preferred}`);
 	}
 
-	const files = fs.readdirSync(baseDir) as string[];
+	if (!fs.existsSync(imageDir) || !fs.statSync(imageDir).isDirectory()) {
+		throw new Error(`未找到图片目录: ${imageDir}`);
+	}
+
+	const files = fs.readdirSync(imageDir) as string[];
 	const candidates = files.filter((name: string) => IMAGE_EXTS.has(path.extname(name).toLowerCase()));
 
 	if (candidates.length === 0) {
-		throw new Error("当前目录下未找到图片文件，请放入海马图片（png/jpg/jpeg/webp/bmp）。");
+		throw new Error(`img 目录下未找到图片文件，请放入图片（png/jpg/jpeg/webp/bmp）。`);
 	}
 
-	const seahorseFirst = candidates.sort((a: string, b: string) => {
-		const aScore = /海马|seahorse/i.test(a) ? 0 : 1;
-		const bScore = /海马|seahorse/i.test(b) ? 0 : 1;
-		return aScore - bScore || a.localeCompare(b, "zh-CN");
-	});
-
-	return path.join(baseDir, seahorseFirst[0]);
+	return path.join(imageDir, pickRandomItem(candidates));
 }
 
 function resolveSearchDirs(): string[] {

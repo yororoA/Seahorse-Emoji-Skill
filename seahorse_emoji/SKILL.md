@@ -84,7 +84,7 @@ npm run start -- --mode pixel --width 32 --output json
 ## 输入参数
 
 - `image` (可选): 图片文件名或绝对路径。
-  - 不传时，会自动在当前目录找第一张图片（优先文件名包含“海马”或 `seahorse`）。
+  - 不传时，会自动在 `img/` 目录中随机选择一张图片。
 - `width` (可选): 输出宽度，默认 `32`，范围 `8 ~ 80`。
 - `transparentAsSpace` (可选): 透明像素是否输出为空格，默认 `true`。
 - `mode` (可选): `pixel` 或 `single-cell`，默认 `pixel`。
