@@ -80,7 +80,128 @@ export function renderSeahorseCell(text: string): string {
 }
 ```
 
-## 4. VS Code Editor Display
+### 3.1 Web 自动加载（推荐）
+
+如果你能拿到 `renderHints.assets.woff2Path` 对应的可访问 URL（例如 `/assets/SeahorseEmoji-E000.woff2`），可在前端启动时自动注册字体：
+
+```ts
+type SingleCellHints = {
+  codepoint: string;
+  shortcode: string;
+  assets?: {
+    woff2Path?: string;
+    fontFamily?: string;
+  };
+};
+
+const loadedFonts = new Set<string>();
+
+export async function ensureSeahorseFont(hints: SingleCellHints, toPublicUrl: (assetPath: string) => string) {
+  const family = hints.assets?.fontFamily || "SeahorseEmoji";
+  const woff2Path = hints.assets?.woff2Path;
+  if (!woff2Path) {
+    return false;
+  }
+
+  if (loadedFonts.has(family)) {
+    return true;
+  }
+
+  const face = new FontFace(family, `url(${toPublicUrl(woff2Path)}) format("woff2")`, {
+    style: "normal",
+    weight: "400"
+  });
+
+  await face.load();
+  document.fonts.add(face);
+  loadedFonts.add(family);
+  return true;
+}
+
+export function applySingleCellMapping(text: string, hints: SingleCellHints): string {
+  // 如果后端有时候返回 shortcode，可在这里统一替换。
+  return text.replaceAll(hints.shortcode, "\uE000");
+}
+```
+
+渲染时给目标元素设置：
+
+```css
+.seahorse-emoji {
+  font-family: "SeahorseEmoji", "Apple Color Emoji", "Segoe UI Emoji", sans-serif;
+}
+```
+
+### 3.2 Electron 自动加载
+
+Electron 通常建议通过 `preload` 暴露一个“安全 URL”给渲染层，再复用 Web 的 `FontFace` 逻辑。
+
+`preload.ts` 示例：
+
+```ts
+import { contextBridge } from "electron";
+import { pathToFileURL } from "url";
+
+contextBridge.exposeInMainWorld("seahorseAssets", {
+  toFileUrl(assetPath: string) {
+    return pathToFileURL(assetPath).toString();
+  }
+});
+```
+
+渲染层：
+
+```ts
+const ok = await ensureSeahorseFont(renderHints, (assetPath) => window.seahorseAssets.toFileUrl(assetPath));
+if (!ok) {
+  // fallback: shortcode or pixel mode
+}
+```
+
+## 4. VS Code / Cursor 客户端
+
+### 4.1 Extension Webview（可自动加载）
+
+如果你自己做 VS Code/Cursor 扩展并使用 Webview，可以自动加载字体。
+
+关键点：本地文件路径不能直接塞给 Webview，需转成 `webview.asWebviewUri(...)`。
+
+扩展侧示例：
+
+```ts
+import * as vscode from "vscode";
+
+function toWebviewFontUri(webview: vscode.Webview, extensionUri: vscode.Uri, relPath: string) {
+  const fontUri = vscode.Uri.joinPath(extensionUri, relPath);
+  return webview.asWebviewUri(fontUri);
+}
+```
+
+在 HTML 中注入：
+
+```html
+<style>
+@font-face {
+  font-family: "SeahorseEmoji";
+  src: url("__WOFF2_URI__") format("woff2");
+  font-display: swap;
+}
+.seahorse-emoji {
+  font-family: "SeahorseEmoji", "Segoe UI Emoji", sans-serif;
+}
+</style>
+```
+
+### 4.2 VS Code/Cursor 的原生聊天面板（通常不可控）
+
+原生聊天面板字体往往不可由扩展直接注入，因此无法保证自动映射私有码位字形。
+
+可行策略：
+
+- 在你可控的 Webview/页面里显示单字符 emoji。
+- 在不可控面板里回退 `:seahorse:` 或 `pixel`。
+
+## 5. VS Code Editor Display
 
 Install `SeahorseEmoji.ttf` in OS first, then set VS Code font fallback.
 
@@ -100,7 +221,7 @@ Important:
 - Skill can output marker Unicode (e.g. `\uE000`) automatically.
 - But glyph mapping is a rendering concern. You still need client-side font loading or shortcode replacement.
 
-## 5. CLI / Terminal Display
+## 6. CLI / Terminal Display
 
 Terminal support differs by renderer.
 
@@ -122,7 +243,7 @@ If terminal does not honor fallback fonts, use fallback strategy:
 - show `:seahorse:`
 - or call your existing `pixel` mode.
 
-## 6. Runtime Fallback Strategy (important)
+## 7. Runtime Fallback Strategy (important)
 
 Recommended priority:
 
@@ -130,7 +251,7 @@ Recommended priority:
 2. If glyph missing (tofu box / unknown char), render `:seahorse:`.
 3. If rich output allowed, render pixel-art block emoji.
 
-## 7. With Your Current Script
+## 8. With Your Current Script
 
 Already supported:
 
@@ -150,7 +271,7 @@ Pixel fallback:
 npm run start -- --mode pixel --width 24
 ```
 
-## 8. What is not possible
+## 9. What is not possible
 
 - You cannot create a new global Unicode emoji by code alone.
 - "One-cell custom emoji" always requires platform rendering control (font or shortcode system).

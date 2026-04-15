@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>SeahorseEmoji Font Test</title>
+  <style>
+    @font-face {
+      font-family: "SeahorseEmoji";
+      src: url("./generated/SeahorseEmoji-E000.woff2") format("woff2");
+      font-display: swap;
+    }
+
+    body {
+      font-family: "Segoe UI", sans-serif;
+      padding: 24px;
+    }
+
+    .cell {
+      font-family: "SeahorseEmoji", "Segoe UI Emoji", sans-serif;
+      font-size: 80px;
+      line-height: 1;
+      margin: 8px 0 16px;
+    }
+
+    code {
+      background: #f3f3f3;
+      padding: 2px 6px;
+      border-radius: 6px;
+    }
+  </style>
+</head>
+<body>
+  <h1>SeahorseEmoji 字体验证</h1>
+  <p>下面这个字符应显示为海马（码位 <code>U+E000</code>）：</p>
+  <div class="cell">&#xE000;</div>
+  <p>如果这里显示为方框，说明当前渲染环境没有正确加载自定义字体。</p>
+</body>
+</html>

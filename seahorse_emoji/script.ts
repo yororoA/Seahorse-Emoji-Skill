@@ -70,6 +70,10 @@ type RasterGrid = {
 	cells: RasterCell[];
 };
 
+type RasterLoadOptions = {
+	trimToColorBounds?: boolean;
+};
+
 function colorDistance(r: number, g: number, b: number, c: readonly [number, number, number]): number {
 	const dr = r - c[0];
 	const dg = g - c[1];
@@ -186,13 +190,48 @@ function toCodepointLabel(value: string): string {
 	return `U+${cp.toString(16).toUpperCase().padStart(4, "0")}`;
 }
 
-async function loadRasterGrid(imagePath: string, width: number): Promise<RasterGrid> {
+function trimImageToColorBounds(image: any): void {
+	const alphaThreshold = 16;
+	const w = image.bitmap.width;
+	const h = image.bitmap.height;
+	let minX = w;
+	let minY = h;
+	let maxX = -1;
+	let maxY = -1;
+
+	for (let y = 0; y < h; y++) {
+		for (let x = 0; x < w; x++) {
+			const idx = (w * y + x) * 4;
+			const a = image.bitmap.data[idx + 3];
+			if (a >= alphaThreshold) {
+				if (x < minX) minX = x;
+				if (y < minY) minY = y;
+				if (x > maxX) maxX = x;
+				if (y > maxY) maxY = y;
+			}
+		}
+	}
+
+	if (maxX < minX || maxY < minY) {
+		throw new Error("图片中未检测到可见颜色区域（非透明像素）。");
+	}
+
+	const cropW = maxX - minX + 1;
+	const cropH = maxY - minY + 1;
+	image.crop(minX, minY, cropW, cropH);
+}
+
+async function loadRasterGrid(imagePath: string, width: number, options: RasterLoadOptions = {}): Promise<RasterGrid> {
 	const jimpModule = require("jimp");
 	const Jimp = (jimpModule as any).default ?? jimpModule;
 	const image = await Jimp.read(imagePath);
 
 	if (!image.bitmap.width || !image.bitmap.height) {
 		throw new Error("图片尺寸无效，无法转换。请更换一张正常图片。");
+	}
+
+	if (options.trimToColorBounds) {
+		trimImageToColorBounds(image);
 	}
 
 	const targetHeight = Math.max(8, Math.round((image.bitmap.height / image.bitmap.width) * width * 0.55));
@@ -302,11 +341,6 @@ function buildGlyphPathFromRaster(raster: RasterGrid): any {
 				continue;
 			}
 
-			const brightness = (cell.r + cell.g + cell.b) / 3;
-			if (brightness > 246) {
-				continue;
-			}
-
 			const x0 = offsetX + x * cellSize;
 			const y0 = offsetY + (raster.height - y - 1) * cellSize;
 			const x1 = x0 + cellSize;
@@ -411,7 +445,9 @@ export async function convertImageToEmoji(input: SkillInput = {}): Promise<Skill
 	const mode = input.mode ?? "pixel";
 	const imagePath = pickImageFromDirs(input.image);
 	const shortcode = input.shortcode ?? ":seahorse:";
-	const raster = await loadRasterGrid(imagePath, width);
+	const raster = await loadRasterGrid(imagePath, width, {
+		trimToColorBounds: mode === "pixel" || mode === "single-cell"
+	});
 
 	if (mode === "single-cell") {
 		const singleCellChar = normalizeSingleCellChar(input.singleCellChar);

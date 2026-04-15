@@ -105,7 +105,7 @@ npm run start -- --mode pixel --width 32 --output json
 ## 行为说明
 
 1. 自动读取海马图片。
-2. 当 `mode=pixel` 时：按比例缩放并映射为彩色方块 emoji（`⬛🟫🟧🟨🟩🟦🟪⬜`）。
+2. 当 `mode=pixel` 时：先检测非透明像素区域，并裁剪到最小外接矩形（左/右/上/下边界均以首个与末个有色像素为准），再按比例缩放并映射为彩色方块 emoji（`⬛🟫🟧🟨🟩🟦🟪⬜`）。
 3. 当 `mode=single-cell` 时：先生成像素栅格，再导出 SVG 与 TTF/WOFF2（绑定 `U+E000` 等私有码位），最后返回单字符与渲染提示。
 
 ## 关键限制
@@ -117,6 +117,16 @@ npm run start -- --mode pixel --width 32 --output json
 - 在不支持自定义字体/短代码替换的终端中，会显示为普通字符或方框。
 
   > 重要：Skill 可以自动输出 Unicode（如 `\uE000`）和字体资源路径，但“映射成 emoji 外观”必须由客户端应用字体或短代码替换逻辑来完成。
+
+## 客户端自动加载建议
+
+- Web / WebView：使用 `renderHints.assets.woff2Path` + `FontFace` 自动注册字体。
+- Electron（含自研客户端）：通过 `preload` 暴露本地字体 URL，再在渲染层走 `FontFace`。
+- VS Code / Cursor：
+  - 扩展的 Webview 可自动加载（`webview.asWebviewUri`）。
+  - 原生聊天面板通常不可注入字体，需回退 `:seahorse:` 或 `pixel`。
+
+详细示例见 [seahorse_emoji/CUSTOM_EMOJI_GUIDE.md](seahorse_emoji/CUSTOM_EMOJI_GUIDE.md)。
 
 ## 使用建议
 
