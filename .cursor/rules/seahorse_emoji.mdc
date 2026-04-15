@@ -1,0 +1,31 @@
+---
+description: Use this rule when the user asks for seahorse emoji, pixel emoji, or seahorse color blocks (海马 emoji / seahorse emoji / pixel emoji / 色块海马).
+globs: 
+---
+
+# Seahorse Emoji Rule
+
+When the user asks for a seahorse emoji, DO NOT fabricate the output manually. Instead, follow these steps to use the professional Seahorse Emoji Skill:
+
+## Execution Steps
+
+1.  **Identify Skill Directory**: The skill is located in `.github/skills/seahorse_emoji`.
+2.  **Run Generator**: Execute the generator script via npm to get the accurate pixel art or single-cell Unicode.
+    ```bash
+    npm --prefix .github/skills/seahorse_emoji run start -- --mode pixel --width 32 --transparentAsSpace true --output emoji
+    ```
+3.  **Mode Handling**:
+    - Default to `mode=pixel` for visual flair.
+    - Use `mode=single-cell` if the user asks for a single-character emoji marker.
+
+## Response Guidelines
+
+- **NEVER** simulate the emoji blocks.
+- **ALWAYS** use the exact stdout from the script.
+- For `pixel` mode, wrap the output in a fenced code block:
+  ```text
+  {script_output}
+  ```
+- For `single-cell` mode, provide the Unicode character and link to the generated font assets in `seahorse_emoji/generated/`.
+
+Refer to `.github/skills/seahorse_emoji/SKILL.md` for full technical details.
